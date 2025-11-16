@@ -91,6 +91,11 @@ if "score" not in st.session_state:
 if "total" not in st.session_state:
     st.session_state.total = 0
 
+if "wrong_words" not in st.session_state:
+    st.session_state.wrong_words = []  # track incorrect spellings
+if "quiz_spelling" not in st.session_state:
+    st.session_state.quiz_spelling = ""  # for clearing text input on new word
+
 
 BASE_DIR = Path(__file__).resolve().parent  # folder where this .py file lives
 CSV_PATH = BASE_DIR / "2025-2026_speling_bee_list.csv"
@@ -182,32 +187,60 @@ with tab_quiz:
     if not st.session_state.word_list:
         st.info("Add some words in the **Look up word** tab first.")
     else:
+        st.write(f"Total words available for quiz: **{len(st.session_state.word_list)}**")
+        st.write(f"Score this session: **{st.session_state.score} / {st.session_state.total}**")
+
+        # Button to pick a new random word
         if st.button("🎲 New word"):
             st.session_state.current_word = random.choice(st.session_state.word_list)
-            st.session_state.feedback = ""
-            st.session_state.user_spelling = ""
+            st.session_state.quiz_feedback = ""
+            st.session_state.last_definition = None
+            # 👇 CLEAR previous spelling input
+            st.session_state["quiz_spelling"] = ""
 
         if st.session_state.current_word:
             quiz_word = st.session_state.current_word
-            st.write("Listen to the word and type the spelling.")
+            st.subheader("Spell this word")
 
-            # Play pronunciation audio if available
+            # Get info for audio + definition
             info = lookup_word(quiz_word)
-            if info and info["audio"]:
+            if info and info.get("audio"):
                 st.audio(info["audio"])
             else:
-                st.caption("No audio available; just spell from memory 🙂.")
+                st.caption("No audio available for this word; spell from memory 🙂.")
 
-            user_spelling = st.text_input("Your spelling:", key="quiz_spelling")
+            user_spelling = st.text_input(
+                "Your spelling:",
+                key="quiz_spelling",
+                placeholder="Type the spelling here"
+            )
 
             if st.button("Check spelling"):
                 st.session_state.total += 1
-                if user_spelling.strip().lower() == quiz_word:
+                normalized = user_spelling.strip().lower()
+
+                # Save definition (if any) to show as feedback
+                st.session_state.last_definition = info.get("meaning") if info else None
+
+                if normalized == quiz_word:
                     st.session_state.score += 1
                     st.success("✅ Correct!")
                 else:
                     st.error(f"❌ Incorrect. Correct spelling: **{quiz_word}**")
+                    # Track words that were missed
+                    if quiz_word not in st.session_state.wrong_words:
+                        st.session_state.wrong_words.append(quiz_word)
 
-            st.write(f"**Score:** {st.session_state.score} / {st.session_state.total}")
+            # Show definition after answer (if available)
+            if st.session_state.get("last_definition"):
+                st.info(f"**Definition:** {st.session_state.last_definition}")
+
         else:
             st.write("Click **New word** to start the quiz.")
+
+        st.markdown("---")
+        with st.expander("Words you missed in this session"):
+            if st.session_state.wrong_words:
+                st.write(", ".join(st.session_state.wrong_words))
+            else:
+                st.write("✅ No missed words yet—great job!")
